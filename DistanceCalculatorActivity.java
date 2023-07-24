@@ -65,9 +65,15 @@ public class DistanceCalculatorActivity extends AppCompatActivity implements OnM
     private Button btnCalculateDistances;
     private Polyline routePolyline;
     private GeoApiContext geoApiContext;
+
     private int selectedLocationIndex = -1; // Initialize with an invalid value
-    private List<LocationInputView> locationsList;
-    
+    private class LocationInfo {
+        String name;
+        double latitude;
+        double longitude;
+    }
+    private List<LocationInfo> locationsList;
+
     private int additionalLocationCount = 0;
     private TextView tvRouteInfo;
     private Button btnAddLocation;
@@ -281,7 +287,7 @@ public class DistanceCalculatorActivity extends AppCompatActivity implements OnM
         return -1; // Location not found in the list
     }
 
-    private void calculateAndDisplayRoute(List<LatLng> locationsLatLng) {
+    private void calculateDistances() {
         // Ensure that the locationsLatLng list is not empty and contains valid coordinates.
         if (locationsLatLng != null && !locationsLatLng.isEmpty()) {
 
@@ -381,7 +387,7 @@ public class DistanceCalculatorActivity extends AppCompatActivity implements OnM
         }
     }
 
-    private void addNewLocationInput() {
+    private void addLocationInput(LocationInfo location) {
         if (locationInputList.size() < MAX_LOCATIONS) {
             View view = getLayoutInflater().inflate(R.layout.location_input_item, null);
             ClearableAutoCompleteTextView locationInput = view.findViewById(R.id.locationInput);
