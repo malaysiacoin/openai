@@ -29,6 +29,7 @@ import com.google.android.gms.maps.model.LatLngBounds;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.maps.model.Polyline;
 import com.google.android.gms.maps.model.PolylineOptions;
+import com.google.android.libraries.places.api.Places;
 import com.google.android.libraries.places.api.model.AutocompletePrediction;
 import com.google.android.libraries.places.api.model.Place;
 import com.google.android.libraries.places.api.model.RectangularBounds;
@@ -49,11 +50,7 @@ import java.util.List;
 import java.util.Locale;
 
 public class DistanceCalculatorActivity extends AppCompatActivity implements OnMapReadyCallback {
-    private AutoCompleteTextView locationInput1;
-    private AutoCompleteTextView locationInput2;
-    private TextView distanceResult;
-    private ImageButton clearInput1; // Declare clearInput1
-    private ImageButton clearInput2; // Declare clearInput2
+
     private static final int MAX_LOCATIONS = 10;
     private static final int LOCATION_PERMISSION_REQUEST_CODE = 1001;
 
@@ -65,19 +62,12 @@ public class DistanceCalculatorActivity extends AppCompatActivity implements OnM
     private Button btnCalculateDistances;
     private Polyline routePolyline;
     private GeoApiContext geoApiContext;
-
     private int selectedLocationIndex = -1; // Initialize with an invalid value
-    private class LocationInfo {
-        String name;
-        double latitude;
-        double longitude;
-    }
-    private List<LocationInfo> locationsList;
 
     private int additionalLocationCount = 0;
     private TextView tvRouteInfo;
     private Button btnAddLocation;
-
+    private List<AutocompletePrediction> predictions = new ArrayList<>();
     private ImageButton btnReorderLocations;
     private LatLng southwestBounds = new LatLng(6.2662, 99.7297); // Replace these values with the actual southwest coordinates of the desired bounds.
     private LatLng northeastBounds = new LatLng(6.4453, 99.8580); // Replace these values with the actual northeast coordinates of the desired bounds.
@@ -87,30 +77,82 @@ public class DistanceCalculatorActivity extends AppCompatActivity implements OnM
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_distance_calculator);
 
+        // Initialize the Places API with your API key
+        Places.initialize(getApplicationContext(), "AIzaSyDZc-Y-Hn1TlIP6B-CafypFRkKecOQyxIk");
+        placesClient = Places.createClient(this);
+        geoApiContext = new GeoApiContext.Builder()
+                .apiKey("AIzaSyDZc-Y-Hn1TlIP6B-CafypFRkKecOQyxIk")
+                .build();
+
         locationInputsLayout = findViewById(R.id.locationInputsLayout);
-        Button btnAddLocation = findViewById(R.id.btnAddLocation);
-        btnAddLocation.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                addLocationInput(null);
-            }
-        });
-
+        locationInputList = new ArrayList<>();
+        clearInputButtonList = new ArrayList<>();
+        btnAddLocation = findViewById(R.id.btnAddLocation); // Declare btnAddLocation in your class if you haven't already
         btnCalculateDistances = findViewById(R.id.btnCalculateDistances);
-        btnCalculateDistances.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                calculateDistances();
+        tvRouteInfo = findViewById(R.id.tvRouteInfo);
+        // Set up the "Reorder Locations" button click listener
+        btnReorderLocations = findViewById(R.id.btnReorderLocations);
+        btnReorderLocations.setOnClickListener(v -> showReorderDialog());
+
+        // Set up the "Add Location" button click listener
+        btnAddLocation.setOnClickListener(v -> {
+            // Check if the maximum number of additional locations is reached
+            if (locationInputList.size() < MAX_LOCATIONS) {
+                // Add a new AutoCompleteTextView for the additional location
+                addNewLocationInput();
+                btnAddLocation.setEnabled(true); // Enable the button since the limit is not reached yet
+            } else {
+                // Display a message or disable the "Add Location" button if the limit is reached
+                Toast.makeText(DistanceCalculatorActivity.this, "Maximum additional locations reached.", Toast.LENGTH_SHORT).show();
+                btnAddLocation.setEnabled(false);
             }
         });
 
-        locationsList = new ArrayList<>();
+        // Initialize the location input list with two Location AutoCompleteTextViews
+        addNewLocationInput();
+        addNewLocationInput();
 
-        addLocationInput(null);
+        // Set up the adapter for AutoCompleteTextViews
+        PlacesAutoCompleteAdapter autoCompleteAdapter = new PlacesAutoCompleteAdapter(this, placesClient, southwestBounds, northeastBounds);
 
-        SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
-                .findFragmentById(R.id.mapFragment);
+        // Assign the adapter to each AutoCompleteTextView
+        for (ClearableAutoCompleteTextView locationInput : locationInputList) {
+            locationInput.setAdapter(autoCompleteAdapter);
+        }
+
+        SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.mapFragment);
         mapFragment.getMapAsync(this);
+
+        btnCalculateDistances.setOnClickListener(v -> {
+            if (checkLocationPermissions()) {
+                List<String> locations = getLocationInputs();
+
+                // Validate and sanitize input data
+                if (areValidLocationInputs(locations) && areDistinctLocationInputs(locations)) {
+                    // Clear any existing route on the map
+                    if (routePolyline != null) {
+                        routePolyline.remove();
+                    }
+
+                    List<LatLng> latLngs = new ArrayList<>();
+                    for (int i = 0; i < locations.size(); i++) {
+                        String location = sanitizeLocationInput(locations.get(i));
+                        getLocationLatLng(location, receivedLatLng -> {
+                            if (receivedLatLng != null) {
+                                latLngs.add(receivedLatLng);
+                                if (latLngs.size() == locations.size()) {
+                                    // All location coordinates are fetched, now calculate and display the route
+                                    calculateAndDisplayRoute(latLngs);
+                                }
+                            }
+                        });
+                    }
+                }
+            } else {
+                requestLocationPermissions();
+            }
+        });
+
     }
 
     private void showReorderDialog() {
@@ -212,7 +254,7 @@ public class DistanceCalculatorActivity extends AppCompatActivity implements OnM
         List<Place.Field> placeFields = Arrays.asList(Place.Field.LAT_LNG);
         FindAutocompletePredictionsRequest request = FindAutocompletePredictionsRequest.builder()
                 .setQuery(location)
-                .setLocationBias(RectangularBounds.newInstance(new LatLng(6.2662, 99.7297), new LatLng(6.4453, 99.8580)))
+                .setLocationBias(RectangularBounds.newInstance(southwestBounds, northeastBounds))
                 .build();
 
         // Store the text of the first input before fetching place details for other locations
@@ -221,10 +263,10 @@ public class DistanceCalculatorActivity extends AppCompatActivity implements OnM
         placesClient.findAutocompletePredictions(request)
                 .addOnSuccessListener((response) -> {
                     if (response != null && response.getAutocompletePredictions().size() > 0) {
-                        AutocompletePrediction prediction = response.getAutocompletePredictions().get(0);
+                        predictions = response.getAutocompletePredictions(); // Store the predictions in the 'predictions' list
 
                         // Fetch place details using FetchPlaceRequest
-                        FetchPlaceRequest placeRequest = FetchPlaceRequest.builder(prediction.getPlaceId(), placeFields).build();
+                        FetchPlaceRequest placeRequest = FetchPlaceRequest.builder(predictions.get(0).getPlaceId(), placeFields).build();
                         placesClient.fetchPlace(placeRequest)
                                 .addOnSuccessListener((placeResponse) -> {
                                     Place place = placeResponse.getPlace();
@@ -287,7 +329,7 @@ public class DistanceCalculatorActivity extends AppCompatActivity implements OnM
         return -1; // Location not found in the list
     }
 
-    private void calculateDistances() {
+    private void calculateAndDisplayRoute(List<LatLng> locationsLatLng) {
         // Ensure that the locationsLatLng list is not empty and contains valid coordinates.
         if (locationsLatLng != null && !locationsLatLng.isEmpty()) {
 
@@ -377,7 +419,6 @@ public class DistanceCalculatorActivity extends AppCompatActivity implements OnM
             View view = getLayoutInflater().inflate(R.layout.location_input_item, null);
             ClearableAutoCompleteTextView locationInput = view.findViewById(R.id.locationInput);
 
-
             locationInputList.add(locationInput);
 
             locationInputsLayout.addView(view);
@@ -387,7 +428,7 @@ public class DistanceCalculatorActivity extends AppCompatActivity implements OnM
         }
     }
 
-    private void addLocationInput(LocationInfo location) {
+    private void addNewLocationInput() {
         if (locationInputList.size() < MAX_LOCATIONS) {
             View view = getLayoutInflater().inflate(R.layout.location_input_item, null);
             ClearableAutoCompleteTextView locationInput = view.findViewById(R.id.locationInput);
@@ -397,28 +438,29 @@ public class DistanceCalculatorActivity extends AppCompatActivity implements OnM
             PlacesAutoCompleteAdapter autoCompleteAdapter = new PlacesAutoCompleteAdapter(this, placesClient, southwestBounds, northeastBounds);
             locationInput.setAdapter(autoCompleteAdapter);
 
-
             // For inputs other than the default location
             deleteLocationButton.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    int index = locationInputList.indexOf(locationInput);
-                    if (index > 1) { // we don't want to delete the first two inputs
-                        locationInputList.remove(index); // Remove the corresponding ClearableAutoCompleteTextView input from the list
-                        clearInputButtonList.remove(index); // Remove the corresponding clear button from the list
-                        locationInputsLayout.removeView(view); // Remove the entire view from the layout
+                    if (v.getId() == R.id.deleteLocation) {
+                        // Get the index of the location item being deleted
+                        int index = locationInputsLayout.indexOfChild((View) v.getParent());
+                        if (index >= 0 && index < predictions.size()) {
+                            // Remove the corresponding item from the predictions list
+                            predictions.remove(index);
 
-                        // Enable the "Add Location" button after removing an input
-                        btnAddLocation.setEnabled(true);
+                            // Remove the location input view from the layout
+                            locationInputsLayout.removeViewAt(index);
+                        }
                     }
                 }
+
             });
 
             // Hide the delete button for the first two inputs
             if (locationInputList.size() < 2) {
                 deleteLocationButton.setVisibility(View.GONE);
             }
-
             locationInputList.add(locationInput);
             locationInputsLayout.addView(view);
         }
