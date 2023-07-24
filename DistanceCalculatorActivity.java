@@ -66,7 +66,8 @@ public class DistanceCalculatorActivity extends AppCompatActivity implements OnM
     private Polyline routePolyline;
     private GeoApiContext geoApiContext;
     private int selectedLocationIndex = -1; // Initialize with an invalid value
-
+    private List<LocationInputView> locationsList;
+    
     private int additionalLocationCount = 0;
     private TextView tvRouteInfo;
     private Button btnAddLocation;
