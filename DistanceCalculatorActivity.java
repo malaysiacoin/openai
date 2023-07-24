@@ -1,19 +1,11 @@
 package com.example.locdet;
 
-import static androidx.transition.Explode.calculateDistance;
-import static com.google.android.material.internal.ViewUtils.hideKeyboard;
-
 import android.Manifest;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.os.Bundle;
-import android.text.Editable;
 import android.text.TextUtils;
-import android.text.TextWatcher;
-import android.view.KeyEvent;
 import android.view.View;
-import android.view.inputmethod.EditorInfo;
-import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
 import android.widget.Button;
@@ -31,6 +23,7 @@ import androidx.core.content.ContextCompat;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
+import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.LatLngBounds;
 import com.google.android.gms.maps.model.MarkerOptions;
@@ -87,98 +80,37 @@ public class DistanceCalculatorActivity extends AppCompatActivity implements OnM
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_distance_calculator);
 
-        locationInput1 = findViewById(R.id.locationInput1);
-        locationInput2 = findViewById(R.id.locationInput2);
-        distanceResult = findViewById(R.id.distanceResult);
+        // Initialize location inputs layout
+        locationInputsLayout = findViewById(R.id.locationInputsLayout);
 
-        // Newly added code
-        clearInput1 = findViewById(R.id.clearInput1);
-        clearInput2 = findViewById(R.id.clearInput2);
-
-        // Hide the clear button initially
-        clearInput1.setVisibility(View.GONE);
-        clearInput2.setVisibility(View.GONE);
-
-        // Add a text watcher for locationInput1
-        locationInput1.addTextChangedListener(new TextWatcher() {
+        // Set up 'Add Location' button
+        Button btnAddLocation = findViewById(R.id.btnAddLocation);
+        btnAddLocation.setOnClickListener(new View.OnClickListener() {
             @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-            }
-
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-                // Show clear button when there is text in the input field
-                if (s.length() > 0) {
-                    clearInput1.setVisibility(View.VISIBLE);
-                } else {
-                    clearInput1.setVisibility(View.GONE);
-                }
-            }
-
-            @Override
-            public void afterTextChanged(Editable s) {
+            public void onClick(View v) {
+                addLocationInput(null);
             }
         });
 
-        // Add a text watcher for locationInput2
-        locationInput2.addTextChangedListener(new TextWatcher() {
+        // Set up 'Calculate Distances' button
+        btnCalculateDistances = findViewById(R.id.btnCalculateDistances);
+        btnCalculateDistances.setOnClickListener(new View.OnClickListener() {
             @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-            }
-
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-                // Show clear button when there is text in the input field
-                if (s.length() > 0) {
-                    clearInput2.setVisibility(View.VISIBLE);
-                } else {
-                    clearInput2.setVisibility(View.GONE);
-                }
-            }
-
-            @Override
-            public void afterTextChanged(Editable s) {
+            public void onClick(View v) {
+                calculateDistances();
             }
         });
 
-        locationInput1.setOnEditorActionListener(new TextView.OnEditorActionListener() {
-            @Override
-            public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
-                if (actionId == EditorInfo.IME_ACTION_DONE || actionId == EditorInfo.IME_ACTION_NEXT) {
-                    hideKeyboard(v);
-                    return true;
-                }
-                return false;
-            }
-        });
+        // Initialize locations list
+        locationsList = new ArrayList<>();
 
-        locationInput2.setOnEditorActionListener(new TextView.OnEditorActionListener() {
-            @Override
-            public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
-                if (actionId == EditorInfo.IME_ACTION_DONE) {
-                    hideKeyboard(v);
-                    calculateDistance(v);
-                    return true;
-                }
-                return false;
-            }
-        });
+        // Add one location input by default
+        addLocationInput(null);
 
-        locationInput1.setAdapter(new PlacesAutoCompleteAdapter(this, R.layout.autocomplete_list_item));
-        locationInput1.setOnItemClickListener(new AdapterView.OnItemClickListener() {
-            @Override
-            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-                hideKeyboard(locationInput1);
-            }
-        });
-
-        locationInput2.setAdapter(new PlacesAutoCompleteAdapter(this, R.layout.autocomplete_list_item));
-        locationInput2.setOnItemClickListener(new AdapterView.OnItemClickListener() {
-            @Override
-            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-                hideKeyboard(locationInput2);
-            }
-        });
+        // Set up map fragment
+        SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
+                .findFragmentById(R.id.mapFragment);
+        mapFragment.getMapAsync(this);
     }
 
     private void showReorderDialog() {
