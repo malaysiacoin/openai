@@ -1,11 +1,19 @@
 package com.example.locdet;
 
+import static androidx.transition.Explode.calculateDistance;
+import static com.google.android.material.internal.ViewUtils.hideKeyboard;
+
 import android.Manifest;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.text.Editable;
 import android.text.TextUtils;
+import android.text.TextWatcher;
+import android.view.KeyEvent;
 import android.view.View;
+import android.view.inputmethod.EditorInfo;
+import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
 import android.widget.Button;
@@ -23,13 +31,11 @@ import androidx.core.content.ContextCompat;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
-import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.LatLngBounds;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.maps.model.Polyline;
 import com.google.android.gms.maps.model.PolylineOptions;
-import com.google.android.libraries.places.api.Places;
 import com.google.android.libraries.places.api.model.AutocompletePrediction;
 import com.google.android.libraries.places.api.model.Place;
 import com.google.android.libraries.places.api.model.RectangularBounds;
@@ -50,7 +56,11 @@ import java.util.List;
 import java.util.Locale;
 
 public class DistanceCalculatorActivity extends AppCompatActivity implements OnMapReadyCallback {
-
+    private AutoCompleteTextView locationInput1;
+    private AutoCompleteTextView locationInput2;
+    private TextView distanceResult;
+    private ImageButton clearInput1; // Declare clearInput1
+    private ImageButton clearInput2; // Declare clearInput2
     private static final int MAX_LOCATIONS = 10;
     private static final int LOCATION_PERMISSION_REQUEST_CODE = 1001;
 
@@ -77,82 +87,98 @@ public class DistanceCalculatorActivity extends AppCompatActivity implements OnM
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_distance_calculator);
 
-        // Initialize the Places API with your API key
-        Places.initialize(getApplicationContext(), "AIzaSyDZc-Y-Hn1TlIP6B-CafypFRkKecOQyxIk");
-        placesClient = Places.createClient(this);
-        geoApiContext = new GeoApiContext.Builder()
-                .apiKey("AIzaSyDZc-Y-Hn1TlIP6B-CafypFRkKecOQyxIk")
-                .build();
+        locationInput1 = findViewById(R.id.locationInput1);
+        locationInput2 = findViewById(R.id.locationInput2);
+        distanceResult = findViewById(R.id.distanceResult);
 
-        locationInputsLayout = findViewById(R.id.locationInputsLayout);
-        locationInputList = new ArrayList<>();
-        clearInputButtonList = new ArrayList<>();
-        btnAddLocation = findViewById(R.id.btnAddLocation); // Declare btnAddLocation in your class if you haven't already
-        btnCalculateDistances = findViewById(R.id.btnCalculateDistances);
-        tvRouteInfo = findViewById(R.id.tvRouteInfo);
-        // Set up the "Reorder Locations" button click listener
-        btnReorderLocations = findViewById(R.id.btnReorderLocations);
-        btnReorderLocations.setOnClickListener(v -> showReorderDialog());
+        // Newly added code
+        clearInput1 = findViewById(R.id.clearInput1);
+        clearInput2 = findViewById(R.id.clearInput2);
 
-        // Set up the "Add Location" button click listener
-        btnAddLocation.setOnClickListener(v -> {
-            // Check if the maximum number of additional locations is reached
-            if (locationInputList.size() < MAX_LOCATIONS) {
-                // Add a new AutoCompleteTextView for the additional location
-                addNewLocationInput();
-                btnAddLocation.setEnabled(true); // Enable the button since the limit is not reached yet
-            } else {
-                // Display a message or disable the "Add Location" button if the limit is reached
-                Toast.makeText(DistanceCalculatorActivity.this, "Maximum additional locations reached.", Toast.LENGTH_SHORT).show();
-                btnAddLocation.setEnabled(false);
+        // Hide the clear button initially
+        clearInput1.setVisibility(View.GONE);
+        clearInput2.setVisibility(View.GONE);
+
+        // Add a text watcher for locationInput1
+        locationInput1.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
             }
-        });
 
-        // Initialize the location input list with two Location AutoCompleteTextViews
-        addNewLocationInput();
-        addNewLocationInput();
-
-        // Set up the adapter for AutoCompleteTextViews
-        PlacesAutoCompleteAdapter autoCompleteAdapter = new PlacesAutoCompleteAdapter(this, placesClient, southwestBounds, northeastBounds);
-
-        // Assign the adapter to each AutoCompleteTextView
-        for (ClearableAutoCompleteTextView locationInput : locationInputList) {
-            locationInput.setAdapter(autoCompleteAdapter);
-        }
-
-        SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.mapFragment);
-        mapFragment.getMapAsync(this);
-
-        btnCalculateDistances.setOnClickListener(v -> {
-            if (checkLocationPermissions()) {
-                List<String> locations = getLocationInputs();
-
-                // Validate and sanitize input data
-                if (areValidLocationInputs(locations) && areDistinctLocationInputs(locations)) {
-                    // Clear any existing route on the map
-                    if (routePolyline != null) {
-                        routePolyline.remove();
-                    }
-
-                    List<LatLng> latLngs = new ArrayList<>();
-                    for (int i = 0; i < locations.size(); i++) {
-                        String location = sanitizeLocationInput(locations.get(i));
-                        getLocationLatLng(location, receivedLatLng -> {
-                            if (receivedLatLng != null) {
-                                latLngs.add(receivedLatLng);
-                                if (latLngs.size() == locations.size()) {
-                                    // All location coordinates are fetched, now calculate and display the route
-                                    calculateAndDisplayRoute(latLngs);
-                                }
-                            }
-                        });
-                    }
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                // Show clear button when there is text in the input field
+                if (s.length() > 0) {
+                    clearInput1.setVisibility(View.VISIBLE);
+                } else {
+                    clearInput1.setVisibility(View.GONE);
                 }
-            } else {
-                requestLocationPermissions();
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
             }
         });
 
+        // Add a text watcher for locationInput2
+        locationInput2.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                // Show clear button when there is text in the input field
+                if (s.length() > 0) {
+                    clearInput2.setVisibility(View.VISIBLE);
+                } else {
+                    clearInput2.setVisibility(View.GONE);
+                }
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+            }
+        });
+
+        locationInput1.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+            @Override
+            public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
+                if (actionId == EditorInfo.IME_ACTION_DONE || actionId == EditorInfo.IME_ACTION_NEXT) {
+                    hideKeyboard(v);
+                    return true;
+                }
+                return false;
+            }
+        });
+
+        locationInput2.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+            @Override
+            public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
+                if (actionId == EditorInfo.IME_ACTION_DONE) {
+                    hideKeyboard(v);
+                    calculateDistance(v);
+                    return true;
+                }
+                return false;
+            }
+        });
+
+        locationInput1.setAdapter(new PlacesAutoCompleteAdapter(this, R.layout.autocomplete_list_item));
+        locationInput1.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                hideKeyboard(locationInput1);
+            }
+        });
+
+        locationInput2.setAdapter(new PlacesAutoCompleteAdapter(this, R.layout.autocomplete_list_item));
+        locationInput2.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                hideKeyboard(locationInput2);
+            }
+        });
     }
 
     private void showReorderDialog() {
