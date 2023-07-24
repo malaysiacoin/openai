@@ -102,9 +102,6 @@ public class DistanceCalculatorActivity extends AppCompatActivity implements OnM
         Places.initialize(getApplicationContext(), getString(R.string.google_maps_key));
         placesClient = Places.createClient(this);
 
-        // Set the bounds for the Place Autocomplete search
-        LatLngBounds bounds = new LatLngBounds(new LatLng(-85, -180), new LatLng(85, 180));
-
         // Initialize the UI components
         locationInputsLayout = findViewById(R.id.locationInputsLayout);
         btnAddLocation = findViewById(R.id.btnAddLocation);
@@ -122,7 +119,20 @@ public class DistanceCalculatorActivity extends AppCompatActivity implements OnM
         initializeViewElements(); // Initialize the view elements
         initializeButtonListeners(); // Set up the button listeners
         initializeLocationInputs(); // Set up the location input boxes
+
+        // Contoh titik-titik yang akan ditambahkan ke dalam LatLngBounds.Builder
+        LatLng point1 = new LatLng(37.7749, -122.4194);
+        LatLng point2 = new LatLng(34.0522, -118.2437);
+
+        // Buat LatLngBounds.Builder dan tambahkan titik-titik ke dalamnya
+        LatLngBounds.Builder builder = new LatLngBounds.Builder();
+        builder.include(point1);
+        builder.include(point2);
+
+        // Bangun LatLngBounds dari builder yang sudah ditambahkan titik-titik
+        LatLngBounds bounds = builder.build();
     }
+
 
     public boolean checkLocationPermissions() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
