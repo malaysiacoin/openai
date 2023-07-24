@@ -80,10 +80,7 @@ public class DistanceCalculatorActivity extends AppCompatActivity implements OnM
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_distance_calculator);
 
-        // Initialize location inputs layout
         locationInputsLayout = findViewById(R.id.locationInputsLayout);
-
-        // Set up 'Add Location' button
         Button btnAddLocation = findViewById(R.id.btnAddLocation);
         btnAddLocation.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -92,7 +89,6 @@ public class DistanceCalculatorActivity extends AppCompatActivity implements OnM
             }
         });
 
-        // Set up 'Calculate Distances' button
         btnCalculateDistances = findViewById(R.id.btnCalculateDistances);
         btnCalculateDistances.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -101,13 +97,10 @@ public class DistanceCalculatorActivity extends AppCompatActivity implements OnM
             }
         });
 
-        // Initialize locations list
         locationsList = new ArrayList<>();
 
-        // Add one location input by default
         addLocationInput(null);
 
-        // Set up map fragment
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
                 .findFragmentById(R.id.mapFragment);
         mapFragment.getMapAsync(this);
